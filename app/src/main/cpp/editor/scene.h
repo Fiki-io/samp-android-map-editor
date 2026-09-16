@@ -27,6 +27,7 @@ public:
     bool LoadIDEFile(const std::string& idePath);
     bool LoadIPLFile(const std::string& iplPath);
     bool LoadArea(const std::string& areaName, const std::string& dataDir);
+    bool LoadAreaFromAssets(void* aAssetManager, const std::string& areaName);
     void ClearWorldInstances();
 
     size_t GetWorldInstanceCount() const { return m_WorldInstances.size(); }

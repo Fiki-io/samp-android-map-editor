@@ -140,9 +140,9 @@ bool DFFLoader::ParseGeometry(RwStreamReader& reader, size_t geomSize, DFFGeomet
         }
     }
 
-    // 3. Triangles (jika non-native)
+    // 3. Triangles (RwTriangle is always present in struct if numTriangles > 0)
     std::vector<RwTriangle> rawTriangles;
-    if (!(formatFlags & rwGEOMETRYTRISTRIP) && numTriangles > 0) {
+    if (numTriangles > 0) {
         rawTriangles.resize(numTriangles);
         reader.ReadBytes(rawTriangles.data(), numTriangles * sizeof(RwTriangle));
     }
@@ -174,6 +174,38 @@ bool DFFLoader::ParseGeometry(RwStreamReader& reader, size_t geomSize, DFFGeomet
                 reader.Read(n.y);
                 reader.Read(n.z);
                 outGeom.vertices[i].normal = n;
+            }
+        }
+    }
+
+    // Fallback: Generate normals if geometry has no normals
+    bool allNormalsZero = true;
+    for (const auto& v : outGeom.vertices) {
+        if (v.normal.LengthSq() > 0.001f) {
+            allNormalsZero = false;
+            break;
+        }
+    }
+    if (allNormalsZero && !rawTriangles.empty()) {
+        for (const auto& tri : rawTriangles) {
+            if (tri.a < outGeom.vertices.size() && tri.b < outGeom.vertices.size() && tri.c < outGeom.vertices.size()) {
+                Vec3 v0 = outGeom.vertices[tri.a].position;
+                Vec3 v1 = outGeom.vertices[tri.b].position;
+                Vec3 v2 = outGeom.vertices[tri.c].position;
+                Vec3 fn = (v1 - v0).Cross(v2 - v0);
+                float len = fn.Length();
+                if (len > 1e-6f) fn = fn * (1.0f / len);
+                outGeom.vertices[tri.a].normal += fn;
+                outGeom.vertices[tri.b].normal += fn;
+                outGeom.vertices[tri.c].normal += fn;
+            }
+        }
+        for (auto& v : outGeom.vertices) {
+            float len = v.normal.Length();
+            if (len > 1e-6f) {
+                v.normal = v.normal * (1.0f / len);
+            } else {
+                v.normal = Vec3(0.0f, 0.0f, 1.0f);
             }
         }
     }

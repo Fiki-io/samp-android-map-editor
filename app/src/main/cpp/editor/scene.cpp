@@ -60,6 +60,40 @@ void Scene::ClearWorldInstances() {
     m_WorldSpatialGrid.Clear();
 }
 
+#ifdef __ANDROID__
+#include <android/asset_manager.h>
+#include <android/log.h>
+#define SCENE_LOGI(...) __android_log_print(ANDROID_LOG_INFO, "Scene", __VA_ARGS__)
+#define SCENE_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "Scene", __VA_ARGS__)
+#else
+#define SCENE_LOGI(...)
+#define SCENE_LOGE(...)
+#endif
+
+static std::string ReadAssetContent(void* assetManager, const std::string& relativePath) {
+#ifdef __ANDROID__
+    if (!assetManager) return "";
+    AAssetManager* mgr = static_cast<AAssetManager*>(assetManager);
+    AAsset* asset = AAssetManager_open(mgr, relativePath.c_str(), AASSET_MODE_BUFFER);
+    if (!asset) {
+        SCENE_LOGE("Failed to open asset: %s", relativePath.c_str());
+        return "";
+    }
+    size_t size = AAsset_getLength(asset);
+    std::string content;
+    content.resize(size);
+    int readBytes = AAsset_read(asset, &content[0], size);
+    AAsset_close(asset);
+    if (readBytes < 0) {
+        SCENE_LOGE("Failed to read asset: %s", relativePath.c_str());
+        return "";
+    }
+    return content;
+#else
+    return "";
+#endif
+}
+
 bool Scene::LoadArea(const std::string& areaName, const std::string& dataDir) {
     // Load generic definitions
     LoadIDEFile(dataDir + "/maps/generic/barriers.ide");
@@ -77,6 +111,59 @@ bool Scene::LoadArea(const std::string& areaName, const std::string& dataDir) {
         }
     }
     return !m_WorldInstances.empty();
+}
+
+bool Scene::LoadAreaFromAssets(void* aAssetManager, const std::string& areaName) {
+#ifdef __ANDROID__
+    if (!aAssetManager) return false;
+
+    // 1. Generic IDE definitions
+    std::vector<std::string> genericIdes = {
+        "data/maps/generic/barriers.ide",
+        "data/maps/generic/dynamic.ide",
+        "data/maps/generic/dynamic2.ide",
+        "data/maps/generic/vegepart.ide"
+    };
+    for (const auto& path : genericIdes) {
+        std::string content = ReadAssetContent(aAssetManager, path);
+        if (!content.empty()) {
+            IDEParser::ParseString(content, m_ObjectDefs);
+        }
+    }
+
+    // 2. LA area map instances and definitions
+    if (areaName == "LA" || areaName == "all") {
+        std::vector<std::string> laFiles = {
+            "LAe", "LAe2", "LAn", "LAn2", "LAs", "LAs2", "LAw", "LAw2", "LaWn", "LAhills"
+        };
+        for (const auto& f : laFiles) {
+            std::string idePath = "data/maps/LA/" + f + ".ide";
+            std::string iplPath = "data/maps/LA/" + f + ".ipl";
+
+            std::string ideContent = ReadAssetContent(aAssetManager, idePath);
+            if (!ideContent.empty()) {
+                IDEParser::ParseString(ideContent, m_ObjectDefs);
+            }
+
+            std::string iplContent = ReadAssetContent(aAssetManager, iplPath);
+            if (!iplContent.empty()) {
+                std::vector<MapInstance> instances;
+                if (IPLParser::ParseString(iplContent, instances)) {
+                    size_t baseIdx = m_WorldInstances.size();
+                    for (size_t i = 0; i < instances.size(); ++i) {
+                        m_WorldSpatialGrid.Insert(instances[i].position, baseIdx + i);
+                        m_WorldInstances.push_back(std::move(instances[i]));
+                    }
+                }
+            }
+        }
+    }
+    SCENE_LOGI("LoadAreaFromAssets %s complete: loaded %zu world instances, %zu total object defs",
+               areaName.c_str(), m_WorldInstances.size(), m_ObjectDefs.size());
+    return !m_WorldInstances.empty();
+#else
+    return false;
+#endif
 }
 
 EditorObject* Scene::SpawnObject(uint32_t modelId, const Vec3& position) {

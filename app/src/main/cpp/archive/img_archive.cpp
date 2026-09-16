@@ -66,7 +66,11 @@ bool IMGArchive::Open(const std::string& filePath) {
 
 bool IMGArchive::OpenFromFd(int fd, uint64_t fileLength) {
     Close();
-    m_Fd = fd;
+    m_Fd = dup(fd);
+    if (m_Fd < 0) {
+        std::cerr << "[IMGArchive] Failed to dup fd: " << fd << std::endl;
+        return false;
+    }
     m_FileSize = fileLength;
 
     RawIMGv2Header header{};

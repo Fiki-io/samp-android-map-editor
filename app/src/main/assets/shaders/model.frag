@@ -14,23 +14,27 @@ uniform vec3 uLightDir; // Arah matahari (normalized)
 out vec4 FragColor;
 
 void main() {
-    vec4 texColor = vec4(1.0);
+    vec4 baseColor = vec4(1.0);
     if (uHasTexture) {
-        texColor = texture(uTexture, vTexCoord);
-        // Alpha testing: buang pixel transparan (dedaunan, pagar kawat GTA)
+        vec4 texColor = texture(uTexture, vTexCoord);
         if (texColor.a < 0.25) {
             discard;
         }
+        baseColor = texColor;
     }
 
-    // GTA style basic lighting: Ambient + Diffuse
-    vec3 norm = normalize(vNormal);
+    // Safe lighting calculation without NaN
+    float nLen = length(vNormal);
+    vec3 norm = (nLen > 0.001) ? (vNormal / nLen) : vec3(0.0, 0.0, 1.0);
     vec3 lightDir = normalize(uLightDir);
     float diff = max(dot(norm, lightDir), 0.0);
     vec3 ambient = vec3(0.55);
     vec3 diffuse = diff * vec3(0.65);
     vec3 lighting = ambient + diffuse;
 
-    vec4 finalColor = texColor * vColor * uTint * vec4(lighting, 1.0);
-    FragColor = vec4(finalColor.rgb, texColor.a * uTint.a);
+    // Use vertex color if valid (alpha > 0.0), else default white
+    vec4 vertCol = (vColor.a > 0.01) ? vColor : vec4(1.0);
+
+    vec3 rgb = baseColor.rgb * vertCol.rgb * uTint.rgb * lighting;
+    FragColor = vec4(rgb, baseColor.a * uTint.a);
 }

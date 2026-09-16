@@ -72,14 +72,36 @@ Java_com_samp_mapeditor_NativeEngine_nativeLoadIPL(
     return ok ? JNI_TRUE : JNI_FALSE;
 }
 
+#include <android/asset_manager.h>
+#include <android/asset_manager_jni.h>
+
+static AAssetManager* g_AssetManager = nullptr;
+
+JNIEXPORT void JNICALL
+Java_com_samp_mapeditor_NativeEngine_nativeSetAssetManager(
+    JNIEnv* env, jobject /* this */, jobject jAssetManager) {
+    if (jAssetManager) {
+        g_AssetManager = AAssetManager_fromJava(env, jAssetManager);
+        LOGI("[NativeEngine] AssetManager registered successfully: %p", g_AssetManager);
+    }
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_samp_mapeditor_NativeEngine_nativeLoadArea(
     JNIEnv* env, jobject /* this */, jstring jArea, jstring jDataDir) {
     if (!g_Scene) return JNI_FALSE;
     const char* area = env->GetStringUTFChars(jArea, nullptr);
     const char* dataDir = env->GetStringUTFChars(jDataDir, nullptr);
-    bool ok = g_Scene->LoadArea(area, dataDir);
-    LOGI("[NativeEngine] nativeLoadArea %s from %s: instances=%zu, ok=%d", area, dataDir, g_Scene->GetWorldInstanceCount(), ok);
+
+    bool ok = false;
+    if (g_AssetManager) {
+        ok = g_Scene->LoadAreaFromAssets(g_AssetManager, area);
+    }
+    if (!ok && dataDir && strlen(dataDir) > 0) {
+        ok = g_Scene->LoadArea(area, dataDir);
+    }
+
+    LOGI("[NativeEngine] nativeLoadArea %s (assetMgr=%p): instances=%zu, ok=%d", area, g_AssetManager, g_Scene->GetWorldInstanceCount(), ok);
     env->ReleaseStringUTFChars(jArea, area);
     env->ReleaseStringUTFChars(jDataDir, dataDir);
     return ok ? JNI_TRUE : JNI_FALSE;

@@ -31,6 +31,7 @@ class MainActivity : Activity() {
     private lateinit var txtStatus: TextView
     private lateinit var txtLiveHud: TextView
 
+    private var currentGta3Pfd: ParcelFileDescriptor? = null
     private val REQUEST_GTA3_IMG = 1001
     private val mainHandler = Handler(Looper.getMainLooper())
     private val logHistory = StringBuilder()
@@ -39,6 +40,9 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         log("Starting SA-MP Map Editor...")
+
+        // Daftarkan AssetManager ke native C++
+        NativeEngine.nativeSetAssetManager(assets)
 
         // 1. Siapkan aset internal SAMP & data/
         val sampImgFile = copyAssetToFile("samp/SAMP.img")
@@ -338,32 +342,31 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Pilih Lokasi & Load Map")
             .setItems(locations) { _, which ->
-                val dataDir = File(filesDir, "data")
                 when (which) {
                     0 -> {
                         // Pershing Square LS
-                        NativeEngine.nativeLoadArea("LA", dataDir.absolutePath)
+                        NativeEngine.nativeLoadArea("LA", "")
                         NativeEngine.nativeSetCameraPos(1500.0f, -1650.0f, 40.0f, 0.0f, -15.0f)
                         log("Teleported to Los Santos Pershing Square (1500, -1650, 40)")
                         Toast.makeText(this, "Memuat Los Santos & Teleport!", Toast.LENGTH_SHORT).show()
                     }
                     1 -> {
                         // Grove Street
-                        NativeEngine.nativeLoadArea("LA", dataDir.absolutePath)
+                        NativeEngine.nativeLoadArea("LA", "")
                         NativeEngine.nativeSetCameraPos(2490.0f, -1670.0f, 25.0f, 90.0f, -10.0f)
                         log("Teleported to Grove Street (2490, -1670, 25)")
                         Toast.makeText(this, "Memuat Grove Street & Teleport!", Toast.LENGTH_SHORT).show()
                     }
                     2 -> {
                         // Santa Maria Beach
-                        NativeEngine.nativeLoadArea("LA", dataDir.absolutePath)
+                        NativeEngine.nativeLoadArea("LA", "")
                         NativeEngine.nativeSetCameraPos(380.0f, -1880.0f, 20.0f, 180.0f, -10.0f)
                         log("Teleported to Santa Maria Beach (380, -1880, 20)")
                         Toast.makeText(this, "Memuat Santa Maria Beach!", Toast.LENGTH_SHORT).show()
                     }
                     3 -> {
                         // Maze Bank Tower
-                        NativeEngine.nativeLoadArea("LA", dataDir.absolutePath)
+                        NativeEngine.nativeLoadArea("LA", "")
                         NativeEngine.nativeSetCameraPos(1540.0f, -1350.0f, 350.0f, 45.0f, -25.0f)
                         log("Teleported to Maze Bank Tower (1540, -1350, 350)")
                         Toast.makeText(this, "Teleport ke Atas Maze Bank!", Toast.LENGTH_SHORT).show()
@@ -512,6 +515,8 @@ class MainActivity : Activity() {
 
                 val pfd = contentResolver.openFileDescriptor(uri, "r")
                 if (pfd != null) {
+                    currentGta3Pfd?.close()
+                    currentGta3Pfd = pfd
                     val fd = pfd.fd
                     val length = pfd.statSize
                     val ok = NativeEngine.nativeLoadGTA3Fd(fd, length)
@@ -520,19 +525,11 @@ class MainActivity : Activity() {
                         txtStatus.text = "GTA3: MOUNTED (${length / (1024 * 1024)} MB)"
                         txtStatus.setTextColor(Color.parseColor("#4CAF50"))
 
-                        // Otomatis tawarkan untuk load Los Santos map
-                        AlertDialog.Builder(this)
-                            .setTitle("gta3.img Berhasil Dimount!")
-                            .setMessage("File gta3.img terbaca (${length / (1024 * 1024)} MB). Apakah ingin langsung memuat map kota Los Santos?")
-                            .setPositiveButton("Ya, Muat Los Santos") { _, _ ->
-                                val dataDir = File(filesDir, "data")
-                                NativeEngine.nativeLoadArea("LA", dataDir.absolutePath)
-                                NativeEngine.nativeSetCameraPos(1500.0f, -1650.0f, 45.0f, 0.0f, -15.0f)
-                                log("Auto-loaded Los Santos & moved camera to (1500, -1650, 45)")
-                                Toast.makeText(this, "Los Santos berhasil dimuat!", Toast.LENGTH_SHORT).show()
-                            }
-                            .setNegativeButton("Nanti Saja", null)
-                            .show()
+                        // Langsung muat Map Los Santos secara instan
+                        NativeEngine.nativeLoadArea("LA", "")
+                        NativeEngine.nativeSetCameraPos(1500.0f, -1650.0f, 45.0f, 0.0f, -15.0f)
+                        log("Auto-loaded Los Santos (Pershing Square) from internal assets!")
+                        Toast.makeText(this, "gta3.img aktif! Los Santos dimuat.", Toast.LENGTH_SHORT).show()
                     } else {
                         log("FAILED to mount gta3.img from FD=$fd")
                         Toast.makeText(this, "Gagal mem-parse format gta3.img", Toast.LENGTH_LONG).show()
@@ -578,5 +575,11 @@ class MainActivity : Activity() {
 
     private fun readAssetString(assetName: String): String {
         return assets.open(assetName).bufferedReader().use { it.readText() }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        currentGta3Pfd?.close()
+        currentGta3Pfd = null
     }
 }

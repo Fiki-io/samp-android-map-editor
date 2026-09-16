@@ -14,6 +14,8 @@ object NativeEngine {
         gridFrag: String
     ): Boolean
 
+    external fun nativeSetAssetManager(assetManager: Any)
+
     external fun nativeLoadGTA3Fd(fd: Int, length: Long): Boolean
     external fun nativeLoadIPL(iplPath: String): Boolean
     external fun nativeLoadArea(area: String, dataDir: String): Boolean
