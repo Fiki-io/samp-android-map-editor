@@ -33,7 +33,9 @@ class MainActivity : Activity() {
     private lateinit var txtLiveHud: TextView
 
     private var currentGta3Pfd: ParcelFileDescriptor? = null
+    private var currentSampPfd: ParcelFileDescriptor? = null
     private val REQUEST_GTA3_IMG = 1001
+    private val REQUEST_SAMP_IMG = 1002
     private val mainHandler = Handler(Looper.getMainLooper())
     private val logHistory = StringBuilder()
 
@@ -46,18 +48,16 @@ class MainActivity : Activity() {
         NativeEngine.nativeSetAssetManager(assets)
 
         // 1. Siapkan aset internal SAMP & data/
-        val sampImgFile = copyAssetToFile("samp/SAMP.img")
         val sampIdeFile = copyAssetToFile("samp/SAMP.ide")
-        copyAssetDirectory("data", File(filesDir, "data"))
 
         val modelVert = readAssetString("shaders/model.vert")
         val modelFrag = readAssetString("shaders/model.frag")
         val gridVert = readAssetString("shaders/grid.vert")
         val gridFrag = readAssetString("shaders/grid.frag")
 
-        // 2. Inisialisasi Native Engine
+        // 2. Inisialisasi Native Engine (SAMP.img dan gta3.img di-import manual via file picker)
         val initOk = NativeEngine.nativeInit(
-            sampImgFile.absolutePath,
+            "",
             sampIdeFile.absolutePath,
             modelVert, modelFrag, gridVert, gridFrag
         )
@@ -107,13 +107,22 @@ class MainActivity : Activity() {
         topBar.addView(btnTeleport)
 
         val btnImportGta3 = Button(this).apply {
-            text = "📁 Mount gta3"
+            text = "📁 gta3.img"
             textSize = 10f
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.parseColor("#1E88E5"))
             setOnClickListener { openGTA3Picker() }
         }
         topBar.addView(btnImportGta3)
+
+        val btnImportSamp = Button(this).apply {
+            text = "📁 SAMP.img"
+            textSize = 10f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#E65100"))
+            setOnClickListener { openSAMPPicker() }
+        }
+        topBar.addView(btnImportSamp)
 
         val btnLog = Button(this).apply {
             text = "📜 Log"
@@ -293,10 +302,11 @@ class MainActivity : Activity() {
                         val editorObjs = stats.optInt("editorCount", 0)
                         val worldInsts = stats.optInt("worldInstances", 0)
                         val gta3Entries = stats.optInt("gta3Entries", 0)
+                        val sampEntries = stats.optInt("sampEntries", 0)
 
                         txtLiveHud.text = String.format(
-                            "Cam: (%.1f, %.1f, %.1f) | Editor Objs: %d | World Buildings: %d | GTA3 Models: %d",
-                            camX, camY, camZ, editorObjs, worldInsts, gta3Entries
+                            "Cam: (%.1f, %.1f, %.1f) | Editor: %d | World: %d | GTA3: %d | SAMP: %d",
+                            camX, camY, camZ, editorObjs, worldInsts, gta3Entries, sampEntries
                         )
                     }
                 } catch (e: Exception) {}
@@ -505,6 +515,14 @@ class MainActivity : Activity() {
         startActivityForResult(intent, REQUEST_GTA3_IMG)
     }
 
+    private fun openSAMPPicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+        startActivityForResult(intent, REQUEST_SAMP_IMG)
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_GTA3_IMG && resultCode == RESULT_OK && data != null) {
@@ -534,6 +552,29 @@ class MainActivity : Activity() {
                     } else {
                         log("FAILED to mount gta3.img from FD=$fd")
                         Toast.makeText(this, "Gagal mem-parse format gta3.img", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        } else if (requestCode == REQUEST_SAMP_IMG && resultCode == RESULT_OK && data != null) {
+            val uri: Uri? = data.data
+            if (uri != null) {
+                try {
+                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (e: Exception) {}
+
+                val pfd = contentResolver.openFileDescriptor(uri, "r")
+                if (pfd != null) {
+                    currentSampPfd?.close()
+                    currentSampPfd = pfd
+                    val fd = pfd.fd
+                    val length = pfd.statSize
+                    val ok = NativeEngine.nativeLoadSAMPFd(fd, length)
+                    if (ok) {
+                        log("SAMP.img mounted successfully (FD=$fd, Size=${length / (1024 * 1024)} MB)")
+                        Toast.makeText(this, "SAMP.img berhasil dimount!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        log("FAILED to mount SAMP.img from FD=$fd")
+                        Toast.makeText(this, "Gagal mem-parse format SAMP.img", Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -582,5 +623,7 @@ class MainActivity : Activity() {
         super.onDestroy()
         currentGta3Pfd?.close()
         currentGta3Pfd = null
+        currentSampPfd?.close()
+        currentSampPfd = null
     }
 }

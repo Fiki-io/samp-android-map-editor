@@ -18,17 +18,23 @@ Scene::~Scene() {
 }
 
 bool Scene::LoadSAMPAssets(const std::string& sampImgPath, const std::string& sampIdePath) {
-    bool okImg = m_SampArchive.Open(sampImgPath);
-    if (!okImg) {
-        std::cerr << "[Scene] Failed to open SAMP.img: " << sampImgPath << std::endl;
+    if (!sampImgPath.empty()) {
+        m_SampArchive.Open(sampImgPath);
     }
 
-    bool okIde = IDEParser::ParseFile(sampIdePath, m_ObjectDefs);
-    if (!okIde) {
-        std::cerr << "[Scene] Failed to parse SAMP.ide: " << sampIdePath << std::endl;
+    bool okIde = true;
+    if (!sampIdePath.empty()) {
+        okIde = IDEParser::ParseFile(sampIdePath, m_ObjectDefs);
+        if (!okIde) {
+            std::cerr << "[Scene] Failed to parse SAMP.ide: " << sampIdePath << std::endl;
+        }
     }
 
-    return okImg || okIde;
+    return okIde;
+}
+
+bool Scene::LoadSAMPArchiveFd(int fd, uint64_t fileLength) {
+    return m_SampArchive.OpenFromFd(fd, fileLength);
 }
 
 bool Scene::LoadGTA3Archive(const std::string& gta3ImgPath) {

@@ -22,6 +22,7 @@ public:
     ~Scene();
 
     bool LoadSAMPAssets(const std::string& sampImgPath, const std::string& sampIdePath);
+    bool LoadSAMPArchiveFd(int fd, uint64_t fileLength = 0);
     bool LoadGTA3Archive(const std::string& gta3ImgPath);
     bool LoadGTA3ArchiveFd(int fd, uint64_t fileLength = 0);
     bool LoadIDEFile(const std::string& idePath);

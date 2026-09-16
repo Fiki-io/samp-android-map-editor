@@ -63,6 +63,16 @@ Java_com_samp_mapeditor_NativeEngine_nativeLoadGTA3Fd(
 }
 
 JNIEXPORT jboolean JNICALL
+Java_com_samp_mapeditor_NativeEngine_nativeLoadSAMPFd(
+    JNIEnv* /* env */, jobject /* this */, jint fd, jlong length) {
+    if (!g_Scene) return JNI_FALSE;
+    bool ok = g_Scene->LoadSAMPArchiveFd(fd, static_cast<uint64_t>(length));
+    LOGI("[NativeEngine] Load SAMP from FD=%d, length=%lld: %d (entries=%zu)",
+         fd, (long long)length, ok, g_Scene->GetSAMPEntryCount());
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
 Java_com_samp_mapeditor_NativeEngine_nativeLoadIPL(
     JNIEnv* env, jobject /* this */, jstring jPath) {
     if (!g_Scene) return JNI_FALSE;
