@@ -55,6 +55,30 @@ bool Scene::LoadIPLFile(const std::string& iplPath) {
     return true;
 }
 
+void Scene::ClearWorldInstances() {
+    m_WorldInstances.clear();
+    m_WorldSpatialGrid.Clear();
+}
+
+bool Scene::LoadArea(const std::string& areaName, const std::string& dataDir) {
+    // Load generic definitions
+    LoadIDEFile(dataDir + "/maps/generic/barriers.ide");
+    LoadIDEFile(dataDir + "/maps/generic/dynamic.ide");
+    LoadIDEFile(dataDir + "/maps/generic/dynamic2.ide");
+    LoadIDEFile(dataDir + "/maps/generic/vegepart.ide");
+
+    if (areaName == "LA" || areaName == "all") {
+        std::vector<std::string> laFiles = {
+            "LAe", "LAe2", "LAn", "LAn2", "LAs", "LAs2", "LAw", "LAw2", "LaWn", "LAhills"
+        };
+        for (const auto& f : laFiles) {
+            LoadIDEFile(dataDir + "/maps/LA/" + f + ".ide");
+            LoadIPLFile(dataDir + "/maps/LA/" + f + ".ipl");
+        }
+    }
+    return !m_WorldInstances.empty();
+}
+
 EditorObject* Scene::SpawnObject(uint32_t modelId, const Vec3& position) {
     auto obj = std::make_unique<EditorObject>();
     obj->id = m_NextObjectId++;

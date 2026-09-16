@@ -72,6 +72,56 @@ Java_com_samp_mapeditor_NativeEngine_nativeLoadIPL(
     return ok ? JNI_TRUE : JNI_FALSE;
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_samp_mapeditor_NativeEngine_nativeLoadArea(
+    JNIEnv* env, jobject /* this */, jstring jArea, jstring jDataDir) {
+    if (!g_Scene) return JNI_FALSE;
+    const char* area = env->GetStringUTFChars(jArea, nullptr);
+    const char* dataDir = env->GetStringUTFChars(jDataDir, nullptr);
+    bool ok = g_Scene->LoadArea(area, dataDir);
+    LOGI("[NativeEngine] nativeLoadArea %s from %s: instances=%zu, ok=%d", area, dataDir, g_Scene->GetWorldInstanceCount(), ok);
+    env->ReleaseStringUTFChars(jArea, area);
+    env->ReleaseStringUTFChars(jDataDir, dataDir);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_com_samp_mapeditor_NativeEngine_nativeClearWorld(
+    JNIEnv* /* env */, jobject /* this */) {
+    if (g_Scene) {
+        g_Scene->ClearWorldInstances();
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_samp_mapeditor_NativeEngine_nativeSetCameraPos(
+    JNIEnv* /* env */, jobject /* this */, jfloat x, jfloat y, jfloat z, jfloat yaw, jfloat pitch) {
+    if (g_Renderer) {
+        g_Renderer->GetCamera().SetPosition({x, y, z});
+        g_Renderer->GetCamera().SetRotation(yaw, pitch);
+    }
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_samp_mapeditor_NativeEngine_nativeGetEngineStats(
+    JNIEnv* env, jobject /* this */) {
+    if (!g_Scene || !g_Renderer) return env->NewStringUTF("{}");
+
+    Vec3 pos = g_Renderer->GetCamera().GetPosition();
+    std::stringstream ss;
+    ss << "{"
+       << "\"gta3Entries\":" << g_Scene->GetGTA3EntryCount()
+       << ",\"sampEntries\":" << g_Scene->GetSAMPEntryCount()
+       << ",\"defsCount\":" << g_Scene->GetObjectDefCount()
+       << ",\"worldInstances\":" << g_Scene->GetWorldInstanceCount()
+       << ",\"editorCount\":" << g_Scene->GetEditorObjects().size()
+       << ",\"camX\":" << pos.x
+       << ",\"camY\":" << pos.y
+       << ",\"camZ\":" << pos.z
+       << "}";
+    return env->NewStringUTF(ss.str().c_str());
+}
+
 JNIEXPORT void JNICALL
 Java_com_samp_mapeditor_NativeEngine_nativeSurfaceChanged(
     JNIEnv* /* env */, jobject /* this */, jint width, jint height) {

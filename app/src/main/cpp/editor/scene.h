@@ -26,6 +26,13 @@ public:
     bool LoadGTA3ArchiveFd(int fd, uint64_t fileLength = 0);
     bool LoadIDEFile(const std::string& idePath);
     bool LoadIPLFile(const std::string& iplPath);
+    bool LoadArea(const std::string& areaName, const std::string& dataDir);
+    void ClearWorldInstances();
+
+    size_t GetWorldInstanceCount() const { return m_WorldInstances.size(); }
+    size_t GetObjectDefCount() const { return m_ObjectDefs.size(); }
+    size_t GetGTA3EntryCount() const { return m_Gta3Archive.GetEntryCount(); }
+    size_t GetSAMPEntryCount() const { return m_SampArchive.GetEntryCount(); }
 
     // Object placement & editing
     EditorObject* SpawnObject(uint32_t modelId, const Vec3& position);

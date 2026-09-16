@@ -29,36 +29,42 @@ class MainActivity : Activity() {
     private lateinit var txtSelectedInfo: TextView
     private lateinit var txtCoordInfo: TextView
     private lateinit var txtStatus: TextView
+    private lateinit var txtLiveHud: TextView
 
     private val REQUEST_GTA3_IMG = 1001
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val logHistory = StringBuilder()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Siapkan aset internal (extract SAMP assets dari APK assets jika belum ada di internal storage)
+        log("Starting SA-MP Map Editor...")
+
+        // 1. Siapkan aset internal SAMP & data/
         val sampImgFile = copyAssetToFile("samp/SAMP.img")
         val sampIdeFile = copyAssetToFile("samp/SAMP.ide")
+        copyAssetDirectory("data", File(filesDir, "data"))
 
         val modelVert = readAssetString("shaders/model.vert")
         val modelFrag = readAssetString("shaders/model.frag")
         val gridVert = readAssetString("shaders/grid.vert")
         val gridFrag = readAssetString("shaders/grid.frag")
 
-        // Inisialisasi Native Engine
+        // 2. Inisialisasi Native Engine
         val initOk = NativeEngine.nativeInit(
             sampImgFile.absolutePath,
             sampIdeFile.absolutePath,
             modelVert, modelFrag, gridVert, gridFrag
         )
+        log("Native Engine initialized: $initOk")
 
-        // Bangun Layout UI
+        // 3. Bangun Layout Root
         val rootLayout = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
             setBackgroundColor(Color.BLACK)
         }
 
-        // 1. 3D OpenGL MapView
+        // 4. MapView OpenGL ES 3.0
         mapView = MapView(this).apply {
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
             onObjectSelectedListener = { jsonInfo ->
@@ -67,37 +73,55 @@ class MainActivity : Activity() {
         }
         rootLayout.addView(mapView)
 
-        // 2. Top Bar (Status & Action Buttons)
+        // 5. Top Bar Navigasi
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(24, 24, 24, 24)
-            setBackgroundColor(Color.parseColor("#CC121820"))
+            setPadding(16, 12, 16, 12)
+            setBackgroundColor(Color.parseColor("#E6121820"))
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
                 gravity = Gravity.TOP
             }
         }
 
         txtStatus = TextView(this).apply {
-            text = if (initOk) "SA-MP 0.3.7 Engine: READY" else "Engine: INITIALIZING"
+            text = "SA-MP 0.3.7: READY"
             setTextColor(Color.parseColor("#4CAF50"))
-            textSize = 12f
+            textSize = 11f
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f)
         }
         topBar.addView(txtStatus)
 
+        val btnTeleport = Button(this).apply {
+            text = "📍 Teleport"
+            textSize = 10f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#7B1FA2"))
+            setOnClickListener { showTeleportDialog() }
+        }
+        topBar.addView(btnTeleport)
+
         val btnImportGta3 = Button(this).apply {
-            text = "Mount gta3.img"
-            textSize = 11f
+            text = "📁 Mount gta3"
+            textSize = 10f
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.parseColor("#1E88E5"))
             setOnClickListener { openGTA3Picker() }
         }
         topBar.addView(btnImportGta3)
 
+        val btnLog = Button(this).apply {
+            text = "📜 Log"
+            textSize = 10f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#455A64"))
+            setOnClickListener { showLogDialog() }
+        }
+        topBar.addView(btnLog)
+
         val btnExport = Button(this).apply {
-            text = "Export .PWN"
-            textSize = 11f
+            text = "💾 Export"
+            textSize = 10f
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.parseColor("#2E7D32"))
             setOnClickListener { showExportDialog() }
@@ -106,13 +130,28 @@ class MainActivity : Activity() {
 
         rootLayout.addView(topBar)
 
-        // 3. Floating Action Buttons (Add Object & Camera Fly Controls)
+        // 6. Live HUD Koordinat Real-Time di Pojok Kiri Atas
+        txtLiveHud = TextView(this).apply {
+            text = "Cam: (0.0, 0.0, 30.0) | Objects: 0"
+            textSize = 10f
+            setTextColor(Color.parseColor("#FFFFEE"))
+            setBackgroundColor(Color.parseColor("#88000000"))
+            setPadding(12, 6, 12, 6)
+            layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.TOP or Gravity.START
+                topMargin = 120
+                leftMargin = 20
+            }
+        }
+        rootLayout.addView(txtLiveHud)
+
+        // 7. Floating Action Button (+ Object)
         val fabAdd = Button(this).apply {
             text = "+ Object"
             textSize = 14f
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.parseColor("#FF6F00"))
-            layoutParams = FrameLayout.LayoutParams(220, 120).apply {
+            layoutParams = FrameLayout.LayoutParams(220, 110).apply {
                 gravity = Gravity.BOTTOM or Gravity.END
                 bottomMargin = 240
                 rightMargin = 40
@@ -121,25 +160,25 @@ class MainActivity : Activity() {
         }
         rootLayout.addView(fabAdd)
 
-        // 4. On-screen Flycam Controls (WASD / Altitude)
+        // 8. On-Screen Flycam Controls (WASD & Altitude)
         val flycamControls = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 gravity = Gravity.BOTTOM or Gravity.START
-                leftMargin = 40
-                bottomMargin = 40
+                leftMargin = 30
+                bottomMargin = 30
             }
         }
 
         fun makeCamBtn(label: String, f: Float, r: Float, u: Float) = Button(this).apply {
             text = label
-            textSize = 12f
+            textSize = 11f
             setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#88202530"))
-            layoutParams = LinearLayout.LayoutParams(130, 110).apply { setMargins(4, 4, 4, 4) }
+            setBackgroundColor(Color.parseColor("#99202530"))
+            layoutParams = LinearLayout.LayoutParams(120, 100).apply { setMargins(3, 3, 3, 3) }
             setOnClickListener {
-                NativeEngine.nativeCameraMove(f, r, u, 0.4f)
+                NativeEngine.nativeCameraMove(f, r, u, 0.5f)
             }
         }
 
@@ -150,18 +189,18 @@ class MainActivity : Activity() {
         flycamControls.addView(row1)
 
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        row2.addView(makeCamBtn("◀ Left", 0f, -1f, 0f))
+        row2.addView(makeCamBtn("◀ L", 0f, -1f, 0f))
         row2.addView(makeCamBtn("Back", -1f, 0f, 0f))
-        row2.addView(makeCamBtn("Right ▶", 0f, 1f, 0f))
+        row2.addView(makeCamBtn("R ▶", 0f, 1f, 0f))
         flycamControls.addView(row2)
 
         rootLayout.addView(flycamControls)
 
-        // 5. Bottom Inspector Panel
+        // 9. Bottom Inspector Panel (muncul saat objek disentuh)
         inspectorPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(30, 20, 30, 20)
-            setBackgroundColor(Color.parseColor("#DD182230"))
+            setPadding(24, 16, 24, 16)
+            setBackgroundColor(Color.parseColor("#EE182230"))
             visibility = View.GONE
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 gravity = Gravity.BOTTOM
@@ -170,26 +209,26 @@ class MainActivity : Activity() {
 
         txtSelectedInfo = TextView(this).apply {
             text = "Selected Object"
-            textSize = 14f
+            textSize = 13f
             setTextColor(Color.YELLOW)
         }
         inspectorPanel.addView(txtSelectedInfo)
 
         txtCoordInfo = TextView(this).apply {
             text = "X: 0.00 Y: 0.00 Z: 0.00 | Rot: 0, 0, 0"
-            textSize = 12f
+            textSize = 11f
             setTextColor(Color.WHITE)
         }
         inspectorPanel.addView(txtCoordInfo)
 
         val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 10, 0, 0)
+            setPadding(0, 8, 0, 0)
         }
 
         val btnDuplicate = Button(this).apply {
             text = "Duplicate"
-            textSize = 11f
+            textSize = 10f
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.parseColor("#0277BD"))
             setOnClickListener {
@@ -201,7 +240,7 @@ class MainActivity : Activity() {
 
         val btnDelete = Button(this).apply {
             text = "Delete"
-            textSize = 11f
+            textSize = 10f
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.parseColor("#C62828"))
             setOnClickListener {
@@ -213,7 +252,7 @@ class MainActivity : Activity() {
 
         val btnDeselect = Button(this).apply {
             text = "Deselect"
-            textSize = 11f
+            textSize = 10f
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.parseColor("#546E7A"))
             setOnClickListener {
@@ -226,6 +265,39 @@ class MainActivity : Activity() {
         rootLayout.addView(inspectorPanel)
 
         setContentView(rootLayout)
+
+        // Loop update HUD setiap 500ms
+        startHudUpdater()
+    }
+
+    private fun log(msg: String) {
+        logHistory.append("[").append(android.text.format.DateFormat.format("HH:mm:ss", java.util.Date())).append("] ")
+            .append(msg).append("\n")
+    }
+
+    private fun startHudUpdater() {
+        mainHandler.postDelayed(object : Runnable {
+            override fun run() {
+                try {
+                    val statsJson = NativeEngine.nativeGetEngineStats()
+                    if (statsJson.isNotEmpty() && statsJson != "{}") {
+                        val stats = JSONObject(statsJson)
+                        val camX = stats.optDouble("camX", 0.0)
+                        val camY = stats.optDouble("camY", 0.0)
+                        val camZ = stats.optDouble("camZ", 0.0)
+                        val editorObjs = stats.optInt("editorCount", 0)
+                        val worldInsts = stats.optInt("worldInstances", 0)
+                        val gta3Entries = stats.optInt("gta3Entries", 0)
+
+                        txtLiveHud.text = String.format(
+                            "Cam: (%.1f, %.1f, %.1f) | Editor Objs: %d | World Buildings: %d | GTA3 Models: %d",
+                            camX, camY, camZ, editorObjs, worldInsts, gta3Entries
+                        )
+                    }
+                } catch (e: Exception) {}
+                mainHandler.postDelayed(this, 500)
+            }
+        }, 500)
     }
 
     private fun updateInspector(jsonInfo: String) {
@@ -251,6 +323,93 @@ class MainActivity : Activity() {
         } catch (e: Exception) {
             inspectorPanel.visibility = View.GONE
         }
+    }
+
+    private fun showTeleportDialog() {
+        val locations = arrayOf(
+            "📍 Los Santos (Pershing Square / Center) [Load LA]",
+            "📍 Grove Street (Ganton) [Load LA]",
+            "📍 Santa Maria Beach [Load LA]",
+            "📍 Maze Bank Tower (Rooftop)",
+            "📍 Studio Grid (Origin 0, 0, 30)",
+            "🧹 Bersihkan Map Original (Hanya Objek Mappingan)"
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle("Pilih Lokasi & Load Map")
+            .setItems(locations) { _, which ->
+                val dataDir = File(filesDir, "data")
+                when (which) {
+                    0 -> {
+                        // Pershing Square LS
+                        NativeEngine.nativeLoadArea("LA", dataDir.absolutePath)
+                        NativeEngine.nativeSetCameraPos(1500.0f, -1650.0f, 40.0f, 0.0f, -15.0f)
+                        log("Teleported to Los Santos Pershing Square (1500, -1650, 40)")
+                        Toast.makeText(this, "Memuat Los Santos & Teleport!", Toast.LENGTH_SHORT).show()
+                    }
+                    1 -> {
+                        // Grove Street
+                        NativeEngine.nativeLoadArea("LA", dataDir.absolutePath)
+                        NativeEngine.nativeSetCameraPos(2490.0f, -1670.0f, 25.0f, 90.0f, -10.0f)
+                        log("Teleported to Grove Street (2490, -1670, 25)")
+                        Toast.makeText(this, "Memuat Grove Street & Teleport!", Toast.LENGTH_SHORT).show()
+                    }
+                    2 -> {
+                        // Santa Maria Beach
+                        NativeEngine.nativeLoadArea("LA", dataDir.absolutePath)
+                        NativeEngine.nativeSetCameraPos(380.0f, -1880.0f, 20.0f, 180.0f, -10.0f)
+                        log("Teleported to Santa Maria Beach (380, -1880, 20)")
+                        Toast.makeText(this, "Memuat Santa Maria Beach!", Toast.LENGTH_SHORT).show()
+                    }
+                    3 -> {
+                        // Maze Bank Tower
+                        NativeEngine.nativeLoadArea("LA", dataDir.absolutePath)
+                        NativeEngine.nativeSetCameraPos(1540.0f, -1350.0f, 350.0f, 45.0f, -25.0f)
+                        log("Teleported to Maze Bank Tower (1540, -1350, 350)")
+                        Toast.makeText(this, "Teleport ke Atas Maze Bank!", Toast.LENGTH_SHORT).show()
+                    }
+                    4 -> {
+                        // Grid Origin
+                        NativeEngine.nativeSetCameraPos(0.0f, 0.0f, 30.0f, 0.0f, -20.0f)
+                        log("Teleported to Center Origin Grid (0, 0, 30)")
+                        Toast.makeText(this, "Teleport ke Grid Origin (0, 0)!", Toast.LENGTH_SHORT).show()
+                    }
+                    5 -> {
+                        // Clear World
+                        NativeEngine.nativeClearWorld()
+                        log("World instances cleared (Studio Mode)")
+                        Toast.makeText(this, "Map asli dibersihkan (Studio Mode)!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("Batal", null)
+            .show()
+    }
+
+    private fun showLogDialog() {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 16, 24, 16)
+        }
+
+        val txtLog = EditText(this).apply {
+            setText(logHistory.toString())
+            isFocusable = false
+            textSize = 10f
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 800)
+        }
+        layout.addView(txtLog)
+
+        AlertDialog.Builder(this)
+            .setTitle("Live Engine Logs")
+            .setView(layout)
+            .setPositiveButton("Salin Log") { _, _ ->
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Engine Logs", logHistory.toString()))
+                Toast.makeText(this, "Log disalin!", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Tutup", null)
+            .show()
     }
 
     private fun showObjectCatalogDialog() {
@@ -298,6 +457,7 @@ class MainActivity : Activity() {
             val selected = currentResults.getJSONObject(position)
             val modelId = selected.getInt("id")
             NativeEngine.nativeSpawnObjectInFrontOfCamera(modelId, 8.0f)
+            log("Spawned Object: ${selected.getString("name")} (ID: $modelId)")
             Toast.makeText(this, "Spawned: ${selected.getString("name")} (ID: $modelId)", Toast.LENGTH_SHORT).show()
             dialog.dismiss()
         }
@@ -346,17 +506,35 @@ class MainActivity : Activity() {
         if (requestCode == REQUEST_GTA3_IMG && resultCode == RESULT_OK && data != null) {
             val uri: Uri? = data.data
             if (uri != null) {
-                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                try {
+                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (e: Exception) {}
+
                 val pfd = contentResolver.openFileDescriptor(uri, "r")
                 if (pfd != null) {
                     val fd = pfd.fd
                     val length = pfd.statSize
                     val ok = NativeEngine.nativeLoadGTA3Fd(fd, length)
                     if (ok) {
-                        txtStatus.text = "GTA3.img: MOUNTED (${length / (1024 * 1024)} MB)"
+                        log("gta3.img mounted successfully (FD=$fd, Size=${length / (1024 * 1024)} MB)")
+                        txtStatus.text = "GTA3: MOUNTED (${length / (1024 * 1024)} MB)"
                         txtStatus.setTextColor(Color.parseColor("#4CAF50"))
-                        Toast.makeText(this, "gta3.img berhasil dimuat!", Toast.LENGTH_SHORT).show()
+
+                        // Otomatis tawarkan untuk load Los Santos map
+                        AlertDialog.Builder(this)
+                            .setTitle("gta3.img Berhasil Dimount!")
+                            .setMessage("File gta3.img terbaca (${length / (1024 * 1024)} MB). Apakah ingin langsung memuat map kota Los Santos?")
+                            .setPositiveButton("Ya, Muat Los Santos") { _, _ ->
+                                val dataDir = File(filesDir, "data")
+                                NativeEngine.nativeLoadArea("LA", dataDir.absolutePath)
+                                NativeEngine.nativeSetCameraPos(1500.0f, -1650.0f, 45.0f, 0.0f, -15.0f)
+                                log("Auto-loaded Los Santos & moved camera to (1500, -1650, 45)")
+                                Toast.makeText(this, "Los Santos berhasil dimuat!", Toast.LENGTH_SHORT).show()
+                            }
+                            .setNegativeButton("Nanti Saja", null)
+                            .show()
                     } else {
+                        log("FAILED to mount gta3.img from FD=$fd")
                         Toast.makeText(this, "Gagal mem-parse format gta3.img", Toast.LENGTH_LONG).show()
                     }
                 }
@@ -375,6 +553,27 @@ class MainActivity : Activity() {
             }
         }
         return outFile
+    }
+
+    private fun copyAssetDirectory(srcDir: String, dstDir: File) {
+        val list = assets.list(srcDir) ?: return
+        dstDir.mkdirs()
+        for (file in list) {
+            val srcSub = "$srcDir/$file"
+            val subList = assets.list(srcSub)
+            if (subList != null && subList.isNotEmpty()) {
+                copyAssetDirectory(srcSub, File(dstDir, file))
+            } else {
+                val destFile = File(dstDir, file)
+                if (!destFile.exists() || destFile.length() == 0L) {
+                    assets.open(srcSub).use { input ->
+                        FileOutputStream(destFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun readAssetString(assetName: String): String {

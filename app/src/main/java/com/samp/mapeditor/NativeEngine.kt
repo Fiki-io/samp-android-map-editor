@@ -16,6 +16,10 @@ object NativeEngine {
 
     external fun nativeLoadGTA3Fd(fd: Int, length: Long): Boolean
     external fun nativeLoadIPL(iplPath: String): Boolean
+    external fun nativeLoadArea(area: String, dataDir: String): Boolean
+    external fun nativeClearWorld()
+    external fun nativeSetCameraPos(x: Float, y: Float, z: Float, yaw: Float, pitch: Float)
+    external fun nativeGetEngineStats(): String
 
     external fun nativeSurfaceChanged(width: Int, height: Int)
     external fun nativeRenderFrame()
