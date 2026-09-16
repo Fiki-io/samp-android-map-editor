@@ -1,0 +1,15 @@
+# Gradle & Android
+.gradle/
+build/
+app/build/
+standalone_tests/build/
+local.properties
+
+# IDE & Editor
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
